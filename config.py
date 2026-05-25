@@ -90,7 +90,7 @@ class Config:
         },
         "ccswitch": {
             "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
-            "base_url": "http://127.0.0.1:15722",
+            "base_url": "https://api.jasont.top",
             "model": "gpt-5.5",
             "temperature": 0.7,
             "max_tokens": 2000,
