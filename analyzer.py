@@ -81,6 +81,8 @@ class Analyzer:
                 return self._call_deepseek(data_summary)
             elif self.ai_provider == "anthropic":
                 return self._call_anthropic(data_summary)
+            elif self.ai_provider == "ccswitch":
+                return self._call_ccswitch(data_summary)
             else:
                 logger.warning(f"Unknown AI provider: {self.ai_provider}")
                 return self._generate_fallback_recommendations([])
@@ -175,6 +177,105 @@ class Analyzer:
 
         except Exception as e:
             logger.error(f"DeepSeek API error: {e}")
+            return self._generate_fallback_recommendations([])
+
+    def _call_ccswitch(self, data_summary: str) -> List[Dict[str, Any]]:
+        """通过 cc-switch 本地代理调用 OpenAI Responses API"""
+        try:
+            import requests
+
+            api_config = Config.API_CONFIG.get("ccswitch", {})
+            api_key = api_config.get("api_key")
+
+            if not api_key:
+                logger.warning("API key not configured for ccswitch")
+                return self._generate_fallback_recommendations([])
+
+            prompt = f"""
+请根据以下采集到的数据，分析当前市场上最值得做的5个智能体/插件/自动化工具项目：
+
+{data_summary}
+
+请以JSON格式输出5个推荐项目，每个项目包含：
+- name: 项目名称
+- one_liner: 一句话简介
+- market_demand: 市场需求热度 (1-10)
+- willingness_to_pay: 用户付费意愿 (1-10)
+- competition_level: 竞争程度 (1-10, 低分=低竞争)
+- dev_difficulty: 开发难度 (1-10, 低分=容易)
+- time_to_revenue: 产生收入周期 (1-10, 低分=快)
+- mvp_features: MVP核心功能 (列表, 3-5个)
+- data_evidence: 市场需求的数据支撑 (字符串)
+- monetization: 变现模式建议
+- dev_timeline: 开发周期估算
+- risk_notes: 风险提示
+- priority: 优先级 (1-5, 1最高)
+- reason: 推荐理由
+
+只返回JSON数组，不要其他文本。
+"""
+
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+
+            data = {
+                "model": api_config.get("model", "gpt-5.5"),
+                "input": [
+                    {
+                        "role": "system",
+                        "content": "你是一个资深的产品经理和技术分析师，专门分析市场趋势和产品机会。你只输出JSON数组，不输出任何其他内容。"
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "max_output_tokens": api_config.get("max_tokens", 2000),
+                "stream": True,
+            }
+
+            response = requests.post(
+                f"{api_config.get('base_url')}/v1/responses",
+                headers=headers,
+                json=data,
+                stream=True,
+                timeout=120
+            )
+
+            response.raise_for_status()
+
+            content = ""
+            for line in response.iter_lines():
+                if line:
+                    line_str = line.decode("utf-8")
+                    if line_str.startswith("data: "):
+                        try:
+                            event_data = json.loads(line_str[6:])
+                            if event_data.get("type") == "response.output_text.delta":
+                                content += event_data.get("delta", "")
+                        except json.JSONDecodeError:
+                            pass
+
+            if not content:
+                logger.error("Empty response from ccswitch API")
+                return self._generate_fallback_recommendations([])
+
+            # 解析JSON
+            try:
+                start_idx = content.find("[")
+                end_idx = content.rfind("]") + 1
+                if start_idx >= 0 and end_idx > start_idx:
+                    json_str = content[start_idx:end_idx]
+                    recommendations = json.loads(json_str)
+                    return recommendations if isinstance(recommendations, list) else []
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse ccswitch response as JSON: {content[:200]}")
+                return self._generate_fallback_recommendations([])
+
+        except Exception as e:
+            logger.error(f"ccswitch API error: {e}")
             return self._generate_fallback_recommendations([])
 
     def _call_anthropic(self, data_summary: str) -> List[Dict[str, Any]]:

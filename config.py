@@ -75,7 +75,7 @@ class Config:
     API_CONFIG = {
         "deepseek": {
             "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
-            "base_url": "https://api.deepseek.com",
+            "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
             "model": "deepseek-chat",
             "temperature": 0.7,
             "max_tokens": 2000,
@@ -87,13 +87,20 @@ class Config:
         "anthropic": {
             "api_key": os.getenv("ANTHROPIC_API_KEY", ""),
             "model": "claude-3-sonnet-20240229",
-        }
+        },
+        "ccswitch": {
+            "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
+            "base_url": "http://127.0.0.1:15722",
+            "model": "gpt-5.5",
+            "temperature": 0.7,
+            "max_tokens": 2000,
+        },
     }
 
     # 分析配置
     ANALYZER_CONFIG = {
         "use_ai": True,  # 是否使用AI分析
-        "ai_provider": "deepseek",  # deepseek 或 anthropic
+        "ai_provider": "ccswitch",  # cswitch, deepseek 或 anthropic
         "fallback_to_local": False,  # 如果API失败是否使用本地分析
     }
 
